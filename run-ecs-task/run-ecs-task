@@ -1,0 +1,101 @@
+#!/usr/bin/env python3
+
+import boto3
+import time
+import sys
+import requests
+import json
+import os
+import argparse
+import configparser
+
+def _print(msg):
+    for i in range(1, 4):
+        sys.stdout.write("\033[K")
+        sys.stdout.write("ECS Container: {}{}\r".format(msg, '.'*i))
+        sys.stdout.flush()
+        time.sleep(1.5)
+
+parser = argparse.ArgumentParser(
+    description="Run ECS Fargate Task."
+    )
+parser.add_argument(
+    '--command',
+    help='Config section with the command and configuration.',
+    dest='command',
+    required=True)
+parser.add_argument(
+    '--config',
+    help='Configuration file.',
+    dest='configFile',
+    default='./config.ini')
+args = parser.parse_args()
+
+config = configparser.ConfigParser()
+config.read(args.configFile)
+command = args.command
+
+region = config[command]['region']
+
+ecs = boto3.client('ecs', region_name=region)
+ec2 = boto3.client('ec2', region_name=region)
+
+commandLine = config[command]['command-line'].split()
+cluster = config[command]['cluster']
+subnets = config[command]['subnets'].split()
+containerName = config[command]['container-name']
+taskDefinition = config[command]['task-definition']
+securityGroups = []
+if config[command]['security-groups']:
+    securityGroups = config[command]['security-groups'].split()
+else:
+    sg = ec2.describe_security_groups(
+        Filters=[
+            {
+                'Name': 'group-name',
+                'Values': [
+                    '{}*'.format(config[command]['sg-name-pattern'])
+                ]
+            }
+        ]
+    )
+    securityGroups.append(sg['SecurityGroups'][0]['GroupId'])
+
+response = ecs.run_task(
+    cluster = cluster,
+    taskDefinition = taskDefinition,
+    count = 1,
+    startedBy = os.getenv('USER', 'N/A'),
+    launchType = 'FARGATE',
+    platformVersion = 'LATEST',
+    networkConfiguration = {
+        'awsvpcConfiguration': {
+            'subnets': subnets,
+            'securityGroups': securityGroups,
+            'assignPublicIp': 'ENABLED'
+        }
+    },
+    overrides = {
+        'containerOverrides': [
+            {
+                'name': containerName,
+                'command': commandLine
+            }
+        ]
+    }
+)
+
+taskArn = response['tasks'][0]['taskArn']
+taskId = taskArn.split('/')[1]
+task = ecs.describe_tasks(cluster=cluster, tasks=[taskId])
+lastStatus = task['tasks'][0]['lastStatus']
+
+print('Task ID: %s' % taskId)
+while lastStatus != 'STOPPED':
+    _print(lastStatus)
+    task = ecs.describe_tasks(cluster=cluster, tasks=[taskId])
+    lastStatus = task['tasks'][0]['lastStatus']
+
+print('\n\033[KCommand "%s" done.\n' % args.command)
+exitCode = task['tasks'][0]['containers'][0]['exitCode']
+sys.exit(exitCode)
