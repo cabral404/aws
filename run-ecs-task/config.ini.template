@@ -2,7 +2,7 @@
 region = us-east-1
 command-line = /usr/bin/python manage.py check
 security-groups =
-sg-name-pattern = infra
+sg-name-pattern = infra*
 subnets = subnet-dccb2bf2 subnet-3f943e75 subnet-44dc3a18
 cluster = dev
 task-definition = dev-task-definition

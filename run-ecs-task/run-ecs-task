@@ -54,7 +54,7 @@ else:
             {
                 'Name': 'group-name',
                 'Values': [
-                    '{}*'.format(config[command]['sg-name-pattern'])
+                    '{}'.format(config[command]['sg-name-pattern'])
                 ]
             }
         ]
