@@ -38,7 +38,6 @@ command = args.command
 region = config[command]['region']
 
 ecs = boto3.client('ecs', region_name=region)
-ec2 = boto3.client('ec2', region_name=region)
 
 commandLine = config[command]['command-line'].split()
 cluster = config[command]['cluster']
@@ -49,6 +48,7 @@ securityGroups = []
 if config[command]['security-groups']:
     securityGroups = config[command]['security-groups'].split()
 else:
+    ec2 = boto3.client('ec2', region_name=region)
     sg = ec2.describe_security_groups(
         Filters=[
             {
